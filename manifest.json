@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Better Video Cinema",
+  "version": "1.0.0",
+  "description": "Cinematic mode for any webpage video: dark backdrop, centered video, zero distractions. Works everywhere, including KVS Player and iframe-embedded players.",
+  "permissions": ["scripting", "webNavigation"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_title": "Toggle cinema mode"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

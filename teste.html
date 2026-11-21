@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Página de teste — Modo Cinema</title>
+<style>
+  body { font-family: sans-serif; background: #f4f4f4; color: #222; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; }
+  .site { max-width: 900px; margin: 0 auto; }
+  .player { background: #000; width: 640px; max-width: 100%; }
+  .player video { width: 100%; display: block; }
+  .thumbs { display: flex; gap: 10px; margin-top: 16px; }
+  .thumbs video { width: 160px; background: #000; }
+  .filler { margin-top: 24px; line-height: 1.7; }
+</style>
+</head>
+<body>
+<div class="site">
+  <h1>Teste do Modo Cinema (simula um site com KVS Player)</h1>
+
+  <!-- "Player principal" (é o maior vídeo da página) -->
+  <div class="player">
+    <video src="sample-16x9.mp4" muted loop playsinline></video>
+  </div>
+
+  <!-- "Thumbnails" com preview: vídeos menores que o detetor DEVE ignorar -->
+  <div class="thumbs">
+    <video src="sample-4x3.mp4" muted loop playsinline></video>
+    <video src="sample-4x3.mp4" muted loop playsinline></video>
+    <video src="sample-4x3.mp4" muted loop playsinline></video>
+  </div>
+
+  <div class="filler">
+    <p>Como testar:</p>
+    <ol>
+      <li>Clique no botão da extensão "Modo Cinema" na toolbar → a página fica preta e o vídeo 16:9 vai pro centro.</li>
+      <li>Botão <b>⇄</b> (canto superior direito) → troca pro próximo vídeo (as barras 4:3 aparecem).</li>
+      <li><b>Esc</b>, botão <b>✕</b>, ou o botão da extensão de novo → volta tudo ao normal.</li>
+      <li>Troque de aba e volte → o modo continua ligado.</li>
+    </ol>
+    <p>Rolagem da página fica travada enquanto o modo está ativo (é proposital).</p>
+    <p style="height: 600px; background: #ddd; padding: 16px;">Espaço de rolagem pra conferir que a página fica congelada atrás do cinema.</p>
+  </div>
+</div>
+</body>
+</html>
