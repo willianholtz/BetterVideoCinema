@@ -12,6 +12,15 @@
   }
 
   const OVERLAY_ID = 'modo-cinema-overlay';
+  const PANEL_ID = 'bvc-controls';
+
+  // Tamanho da "tela" do cinema. `auto` = aba inteira (padrão atual).
+  const FRAME_SIZES = {
+    auto:  { label: 'Ajustar', w: '100vw', h: '100vh', inset: '0' },
+    '720': { label: '720p',    w: 'min(1280px, 100vw)', h: 'min(720px, 100vh)',  inset: null },
+    '1080':{ label: '1080p',   w: 'min(1920px, 100vw)', h: 'min(1080px, 100vh)', inset: null },
+    '2160':{ label: '4K',      w: 'min(3840px, 100vw)', h: 'min(2160px, 100vh)', inset: null },
+  };
 
   let active = false;
   let overlay = null;
@@ -20,6 +29,9 @@
   let scrollBackup = null;
   let domObserver = null;
   let attrObserver = null;
+  let qualityOptions = [];
+  let qualityController = null;
+  let frameSize = 'auto';
   const backups = new Map();
 
   // ---------- utilitários ----------
@@ -115,6 +127,144 @@
     scrollBackup = null;
   }
 
+  // ---------- resolução / qualidade ----------
+
+  function labelFromText(text) {
+    const s = String(text || '');
+    let m = s.match(/(?:^|[^0-9])(2160|1440|1080|720|480|360|240)\s*(?:p|\b)/i);
+    if (m) return m[1] + 'p';
+    if (/\b4k\b/i.test(s)) return '2160p';
+    return null;
+  }
+
+  // Tenta achar um controlador adaptativo (HLS.js / player) que troque de
+  // nível SEM recriar o elemento — caminho preferido, sem buffering longo.
+  function findAdaptiveController() {
+    const v = current;
+    const seen = new Set();
+    const candidates = [];
+    const push = (o) => {
+      if (o && typeof o === 'object' && !seen.has(o)) { seen.add(o); candidates.push(o); }
+    };
+    push(v && v.hls);
+    push(v && v._hls);
+    push(window.hls);
+    push(window.player);
+    push(v && v.player);
+    push(v && v._player);
+
+    for (const o of candidates) {
+      try {
+        let levels = o.levels || (typeof o.getLevels === 'function' && o.getLevels());
+        if (!levels && o.playback) levels = o.playback.levels;
+        if (!Array.isArray(levels) || !levels.length) continue;
+
+        const readLevel = () => {
+          for (const l of [o.currentLevel, o.level, o.currentQuality, o.playback && o.playback.currentLevel]) {
+            if (typeof l === 'number' && l >= 0) return l;
+          }
+          return -1;
+        };
+        const writeLevel = (i) => {
+          if ('currentLevel' in o) o.currentLevel = i;
+          else if ('level' in o) o.level = i;
+          else if ('currentQuality' in o) o.currentQuality = i;
+          else if (typeof o.setLevel === 'function') o.setLevel(i);
+          else if (typeof o.setQuality === 'function') o.setQuality(i);
+          else if (o.playback && 'currentLevel' in o.playback) o.playback.currentLevel = i;
+          else return false;
+          return true;
+        };
+        return { levels, readLevel, writeLevel };
+      } catch (e) { /* player esquisito, tenta o próximo */ }
+    }
+    return null;
+  }
+
+  // Descobre as qualidades que o SITE oferece. Nunca inventa resolução:
+  // se o site só tem 720p, é só isso que aparece no menu.
+  function detectQualities() {
+    const v = current;
+    if (!v) return [];
+    const out = [];
+    const seen = new Set();
+    const add = (label, src, kind, index) => {
+      if (!label) return;
+      const key = label + '|' + (src || '') + '|' + (index == null ? '' : index);
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ label, src, kind, index });
+    };
+
+    qualityController = findAdaptiveController();
+    if (qualityController) {
+      qualityController.levels.forEach((lv, i) => {
+        const label = labelFromText(
+          (lv && (lv.label || lv.name || lv.height || lv.width || lv.bitrate)) || ''
+        ) || (lv && lv.height ? lv.height + 'p' : 'Nível ' + (i + 1));
+        add(label, null, 'adaptive', i);
+      });
+    }
+
+    // <source> filhos do vídeo e do container do player (padrão comum em KVS).
+    const roots = [v, v.parentElement, v.parentElement && v.parentElement.parentElement];
+    for (const root of roots) {
+      if (!root || !root.querySelectorAll) continue;
+      let sources;
+      try { sources = root.querySelectorAll('source'); } catch (e) { continue; }
+      sources.forEach((s) => {
+        const src = s.getAttribute('src') || s.src || '';
+        const label = labelFromText(
+          s.dataset.res || s.dataset.quality || s.dataset.label ||
+          s.getAttribute('res') || s.getAttribute('quality') ||
+          s.getAttribute('label') || s.getAttribute('title') || src
+        );
+        add(label, src, 'source', null);
+      });
+    }
+
+    // URL atual (quando o nome do arquivo traz a resolução).
+    const now = v.currentSrc || v.src || '';
+    const nowLabel = labelFromText(now);
+    if (nowLabel) add(nowLabel + ' (atual)', now, 'current', null);
+
+    // Ordena: maior resolução primeiro.
+    out.sort((a, b) => (parseInt(b.label, 10) || 0) - (parseInt(a.label, 10) || 0));
+    return out;
+  }
+
+  // Troca de stream mantendo posição/estado — não "reinicia do zero".
+  function switchToSource(src) {
+    const v = current;
+    if (!v || !src) return false;
+    const state = {
+      time: v.currentTime,
+      paused: v.paused,
+      volume: v.volume,
+      muted: v.muted,
+      rate: v.playbackRate,
+    };
+    const restore = () => {
+      v.removeEventListener('loadedmetadata', restore);
+      try { if (Number.isFinite(state.time) && state.time > 0) v.currentTime = state.time; } catch (e) {}
+      try { v.volume = state.volume; v.muted = state.muted; v.playbackRate = state.rate; } catch (e) {}
+      if (!state.paused && typeof v.play === 'function') {
+        const p = v.play();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      }
+      refreshQualityMenu();
+    };
+    v.addEventListener('loadedmetadata', restore);
+    try {
+      v.src = src;
+      if (typeof v.load === 'function') v.load();
+    } catch (e) {
+      v.removeEventListener('loadedmetadata', restore);
+      return false;
+    }
+    return true;
+  }
+
   // ---------- overlay ----------
 
   function makeButton(glyph, title, onClick) {
@@ -170,9 +320,151 @@
     btnClose.style.right = '14px';
     const btnSwitch = makeButton('\u21C4', 'Trocar de vídeo', () => switchVideo());
     btnSwitch.style.right = '62px';
+    const btnSettings = makeButton('\u2699', 'Resolução e enquadramento', () => togglePanel());
+    btnSettings.style.right = '110px';
+    btnSettings.id = 'bvc-settings-btn';
+
+    const panel = document.createElement('div');
+    panel.id = PANEL_ID;
+    setImp(panel, 'position', 'absolute');
+    setImp(panel, 'top', '60px');
+    setImp(panel, 'right', '14px');
+    setImp(panel, 'width', '190px');
+    setImp(panel, 'max-height', '70vh');
+    setImp(panel, 'overflow-y', 'auto');
+    setImp(panel, 'padding', '10px');
+    setImp(panel, 'box-sizing', 'border-box');
+    setImp(panel, 'background', 'rgba(8,8,8,0.92)');
+    setImp(panel, 'border', '1px solid rgba(255,255,255,0.2)');
+    setImp(panel, 'border-radius', '10px');
+    setImp(panel, 'color', '#eee');
+    setImp(panel, 'font', '12px/1.4 system-ui, sans-serif');
+    setImp(panel, 'z-index', '5');
+    setImp(panel, 'display', 'none');
+    setImp(panel, 'text-align', 'left');
+
+    o.appendChild(btnSettings);
     o.appendChild(btnSwitch);
     o.appendChild(btnClose);
+    o.appendChild(panel);
     return o;
+  }
+
+  function panelOption(label, active, onClick, title) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (title) b.title = title;
+    setImp(b, 'display', 'block');
+    setImp(b, 'width', '100%');
+    setImp(b, 'margin', '3px 0');
+    setImp(b, 'padding', '6px 8px');
+    setImp(b, 'border-radius', '6px');
+    setImp(b, 'border', '1px solid ' + (active ? '#4c8bf5' : 'rgba(255,255,255,0.18)'));
+    setImp(b, 'background', active ? 'rgba(76,139,245,0.28)' : 'rgba(255,255,255,0.06)');
+    setImp(b, 'color', active ? '#fff' : '#ccc');
+    setImp(b, 'font', 'inherit');
+    setImp(b, 'text-align', 'left');
+    setImp(b, 'cursor', 'pointer');
+    b.addEventListener('mouseenter', () => setImp(b, 'background', 'rgba(255,255,255,0.18)'));
+    b.addEventListener('mouseleave', () => setImp(b, 'background', active ? 'rgba(76,139,245,0.28)' : 'rgba(255,255,255,0.06)'));
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); onClick(); });
+    return b;
+  }
+
+  function sectionTitle(text) {
+    const d = document.createElement('div');
+    d.textContent = text;
+    setImp(d, 'margin', '4px 0 6px');
+    setImp(d, 'font-size', '10px');
+    setImp(d, 'letter-spacing', '1px');
+    setImp(d, 'color', '#888');
+    setImp(d, 'text-transform', 'uppercase');
+    return d;
+  }
+
+  function togglePanel(force) {
+    if (!overlay) return;
+    const panel = overlay.querySelector('#' + PANEL_ID);
+    if (!panel) return;
+    const show = typeof force === 'boolean' ? force : (panel.style.display === 'none');
+    setImp(panel, 'display', show ? 'block' : 'none');
+    if (show) refreshQualityMenu();
+  }
+
+  function applyFrame(size) {
+    if (!FRAME_SIZES[size]) return;
+    frameSize = size;
+    if (!overlay) return;
+    const cfg = FRAME_SIZES[size];
+    setImp(overlay, 'width', cfg.w);
+    setImp(overlay, 'height', cfg.h);
+    if (cfg.inset) {
+      setImp(overlay, 'top', '0');
+      setImp(overlay, 'left', '0');
+      setImp(overlay, 'transform', 'none');
+    } else {
+      setImp(overlay, 'top', '50%');
+      setImp(overlay, 'left', '50%');
+      setImp(overlay, 'transform', 'translate(-50%, -50%)');
+    }
+    try { chrome.storage.local.set({ bvcFrame: size }); } catch (e) {}
+    refreshQualityMenu();
+  }
+
+  function currentAdaptiveIndex() {
+    return qualityController ? qualityController.readLevel() : -1;
+  }
+
+  function refreshQualityMenu() {
+    if (!overlay) return;
+    const panel = overlay.querySelector('#' + PANEL_ID);
+    if (!panel || panel.style.display === 'none') return;
+    panel.innerHTML = '';
+
+    panel.appendChild(sectionTitle('Qualidade do stream'));
+    qualityOptions = detectQualities();
+    const activeIdx = currentAdaptiveIndex();
+
+    if (!qualityOptions.length) {
+      const note = document.createElement('div');
+      note.textContent = 'Este site não expõe qualidades. Use o controle dele.';
+      setImp(note, 'color', '#999');
+      setImp(note, 'padding', '4px 0');
+      panel.appendChild(note);
+    } else {
+      qualityOptions.forEach((opt) => {
+        const active = (opt.kind === 'adaptive' && opt.index === activeIdx) ||
+                       (opt.kind === 'current' && activeIdx < 0);
+        panel.appendChild(panelOption(
+          opt.label,
+          active,
+          () => {
+            if (opt.kind === 'adaptive' && qualityController) {
+              qualityController.writeLevel(opt.index);
+            } else if (opt.src) {
+              switchToSource(opt.src);
+            }
+            setTimeout(refreshQualityMenu, 300);
+          },
+          opt.kind === 'adaptive' ? 'Troca direta no player (sem recarregar)' : 'Troca o stream mantendo o tempo atual'
+        ));
+      });
+    }
+
+    panel.appendChild(sectionTitle('Enquadramento'));
+    Object.keys(FRAME_SIZES).forEach((key) => {
+      panel.appendChild(panelOption(FRAME_SIZES[key].label, key === frameSize, () => applyFrame(key)));
+    });
+
+    if (current) {
+      const info = document.createElement('div');
+      setImp(info, 'margin-top', '8px');
+      setImp(info, 'font-size', '10px');
+      setImp(info, 'color', '#777');
+      info.textContent = 'Original: ' + current.videoWidth + '×' + current.videoHeight;
+      panel.appendChild(info);
+    }
   }
 
   function placeInCinema(v) {
@@ -198,6 +490,7 @@
     v.setAttribute('controls', '');
 
     current = v;
+    applyFrame(frameSize);
     restartAttrObserver();
   }
 
@@ -299,7 +592,7 @@
 
   // ---------- mensagens do background ----------
 
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  const onMessage = (msg, _sender, sendResponse) => {
     if (!msg || !msg.cmd) return false;
     try {
       if (msg.cmd === 'probe') {
@@ -334,7 +627,20 @@
       sendResponse({ ok: false, reason: String(e && e.message || e) });
       return false;
     }
-  });
+  };
+  try {
+    if (chrome.runtime && chrome.runtime.onMessage) chrome.runtime.onMessage.addListener(onMessage);
+  } catch (e) { /* browser sem extensão */ }
+
+  // Preferência de enquadramento salva entre sessões.
+  try {
+    chrome.storage.local.get(['bvcFrame'], (r) => {
+      if (r && r.bvcFrame && FRAME_SIZES[r.bvcFrame]) {
+        frameSize = r.bvcFrame;
+        if (overlay) applyFrame(frameSize);
+      }
+    });
+  } catch (e) { /* storage indisponível */ }
 
   window.__modoCinema = {
     ping() {},

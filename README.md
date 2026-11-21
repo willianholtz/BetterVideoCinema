@@ -4,7 +4,7 @@
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-4c8bf5?style=flat-square)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![Browsers](https://img.shields.io/badge/Browsers-Vivaldi%20%7C%20Chrome%20%7C%20Edge-32373c?style=flat-square)](https://vivaldi.com/)
-[![Version](https://img.shields.io/badge/version-1.0.0-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
+[![Version](https://img.shields.io/badge/version-1.1.0-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
 [![Privacy](https://img.shields.io/badge/Tracking-none-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema)
 
 ---
@@ -44,6 +44,8 @@ DRM-protected playback** — things a naive "clone the video" approach breaks.
 | 🌑 **Shadow DOM aware** | Walks `shadowRoot` trees to find players that hide their `<video>` from `querySelector`. |
 | ⏳ **Lazy-load tolerant** | If the video isn't there yet, retries after 1.5 s instead of giving up. |
 | 🔀 **Swap videos** | `⇄` cycles through all videos on the page — handy on KVS pages with several clips. |
+| 🎚️ **Quality control** | `⚙` opens a menu with the qualities the **site actually offers** (720p, 1080p, 4K…). Adaptive players switch levels **in place**; plain streams switch `src` while keeping the current time. |
+| 🖥️ **Frame size** | Pick **720p / 1080p / 4K / Fit** for the cinema screen itself. The choice is remembered between sessions. |
 | 🧹 **Perfect restore** | Original parent, sibling position, `style` and `controls` attributes are backed up and put back. |
 | ⌨️ **Escape** | `Esc` or `✕` exits and unlocks scrolling. |
 | 🟢 **Clear state** | An **ON** badge on the toolbar button while cinema mode is active in that tab. |
@@ -100,6 +102,24 @@ That's it — no build step, no dependencies, no server.
 |---|---|
 | `✕` | Leave cinema mode and restore the video. |
 | `⇄` | Switch to the next video on the page. |
+| `⚙` | Open the **Resolution & Framing** panel. |
+
+### 🎚️ Resolution panel
+
+The `⚙` panel has two sections:
+
+- **Quality of stream** — auto-detected from adaptive player levels (HLS.js and
+  similar), `<source>` tags (`data-res`, `res`, `quality`, filename patterns), or
+  the current URL. Clicking a quality:
+  - on an **adaptive player**, sets the level directly — no reload;
+  - on a **plain stream**, swaps `src` and restores `currentTime`, volume, mute,
+    playback rate and play state — a short buffer, but never back to 0:00.
+  - if the site exposes no qualities, the panel says so instead of showing fake
+    options. The addon **never invents resolution**: if the source is 480p, that's
+    all you get. The real `videoWidth × videoHeight` is shown at the bottom.
+- **Framing** — `Fit` (full tab, default), **720p**, **1080p**, **4K**. These set
+  the size of the black cinema screen (capped at your actual viewport), so you
+  can downsize the window even if your monitor is smaller than 4K.
 
 Both buttons fade to 45% opacity and brighten on hover, so they stay out of the
 way while you watch.
@@ -128,12 +148,16 @@ move the <video> into a fixed black overlay (z-index max)
      │
      ▼
 force controls · lock scroll · badge ON · watch for DOM tampering
+     │
+     ▼
+⚙ menu: probe player levels / <source> / URL → switch quality · set frame size
 ```
 
 The content script also installs a `MutationObserver` that re-adds `controls`
 if the site strips it, and another that exits cinema mode if the page removes
 the overlay. State is kept per tab, so switching tabs and coming back keeps the
-same mode.
+same mode. The framing preference is saved in `chrome.storage.local` and
+restored on the next activation.
 
 ---
 
@@ -144,6 +168,7 @@ same mode.
 | `<all_urls>` host access | Needed to reach the video on **any** site — including pages with iframes. |
 | `scripting` | Injects `content.js` into a frame if it wasn't loaded automatically. |
 | `webNavigation` | Lists the tab's frames to find the one with the biggest video. |
+| `storage` | Remembers your chosen frame size (720p / 1080p / 4K / Fit). |
 
 There are **no external requests**. The extension only injects local code and
 moves DOM nodes inside the current tab.
@@ -166,6 +191,11 @@ BetterVideoCinema/
 
 Open `teste.html` directly in the browser, click the toolbar button, then try
 `Esc`, `⇄`, and click again. Both aspect ratios should fit without cropping.
+
+To check the new controls: click `⚙`, switch between **720p / 1080p / 4K / Fit**
+and confirm the black screen resizes without remounting the video. The test page
+has plain streams; on a page with multiple `<source>` tags or an adaptive player
+the **Quality** section fills up automatically.
 
 ---
 
