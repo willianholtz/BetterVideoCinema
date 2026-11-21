@@ -4,7 +4,7 @@
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-4c8bf5?style=flat-square)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![Browsers](https://img.shields.io/badge/Browsers-Vivaldi%20%7C%20Chrome%20%7C%20Edge-32373c?style=flat-square)](https://vivaldi.com/)
-[![Version](https://img.shields.io/badge/version-1.1.0-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
+[![Version](https://img.shields.io/badge/version-1.1.1-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
 [![Privacy](https://img.shields.io/badge/Tracking-none-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema)
 
 ---
@@ -46,6 +46,7 @@ DRM-protected playback** — things a naive "clone the video" approach breaks.
 | 🔀 **Swap videos** | `⇄` cycles through all videos on the page — handy on KVS pages with several clips. |
 | 🎚️ **Quality control** | `⚙` opens a menu with the qualities the **site actually offers** (720p, 1080p, 4K…). Adaptive players switch levels **in place**; plain streams switch `src` while keeping the current time. |
 | 🖥️ **Frame size** | Pick **720p / 1080p / 4K / Fit** for the cinema screen itself. The choice is remembered between sessions. |
+| 🔇 **Sticky mute/volume** | Mute once and it stays muted — across videos, sites, and browser sessions. The `🔇/🔊` button and the player's own controls both update the saved preference. |
 | 🧹 **Perfect restore** | Original parent, sibling position, `style` and `controls` attributes are backed up and put back. |
 | ⌨️ **Escape** | `Esc` or `✕` exits and unlocks scrolling. |
 | 🟢 **Clear state** | An **ON** badge on the toolbar button while cinema mode is active in that tab. |
@@ -103,6 +104,7 @@ That's it — no build step, no dependencies, no server.
 | `✕` | Leave cinema mode and restore the video. |
 | `⇄` | Switch to the next video on the page. |
 | `⚙` | Open the **Resolution & Framing** panel. |
+| `🔇` / `🔊` | Toggle mute. The choice is saved globally, so it applies to the next video too. |
 
 ### 🎚️ Resolution panel
 
@@ -120,6 +122,15 @@ The `⚙` panel has two sections:
 - **Framing** — `Fit` (full tab, default), **720p**, **1080p**, **4K**. These set
   the size of the black cinema screen (capped at your actual viewport), so you
   can downsize the window even if your monitor is smaller than 4K.
+
+### 🔇 Sticky audio
+
+Mute is a **global, persistent preference**. Use the `🔇/🔊` button in the
+overlay or the player's native controls — either one writes `muted` and `volume`
+to `chrome.storage.local`. When a video enters cinema mode (including after
+`⇄`, a quality swap, or a browser restart), the saved values are applied to it.
+
+If you never touched the volume, the addon leaves the site's own audio alone.
 
 Both buttons fade to 45% opacity and brighten on hover, so they stay out of the
 way while you watch.
@@ -168,7 +179,7 @@ restored on the next activation.
 | `<all_urls>` host access | Needed to reach the video on **any** site — including pages with iframes. |
 | `scripting` | Injects `content.js` into a frame if it wasn't loaded automatically. |
 | `webNavigation` | Lists the tab's frames to find the one with the biggest video. |
-| `storage` | Remembers your chosen frame size (720p / 1080p / 4K / Fit). |
+| `storage` | Remembers frame size (720p / 1080p / 4K / Fit) and your mute/volume preference. |
 
 There are **no external requests**. The extension only injects local code and
 moves DOM nodes inside the current tab.

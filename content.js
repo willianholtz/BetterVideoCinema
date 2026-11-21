@@ -32,6 +32,9 @@
   let qualityOptions = [];
   let qualityController = null;
   let frameSize = 'auto';
+  let savedMuted = null;   // null = nunca configurado → não mexe no som do site
+  let savedVolume = null;
+  let audioListener = null;
   const backups = new Map();
 
   // ---------- utilitários ----------
@@ -247,7 +250,11 @@
     const restore = () => {
       v.removeEventListener('loadedmetadata', restore);
       try { if (Number.isFinite(state.time) && state.time > 0) v.currentTime = state.time; } catch (e) {}
-      try { v.volume = state.volume; v.muted = state.muted; v.playbackRate = state.rate; } catch (e) {}
+      try {
+        v.volume = savedVolume != null ? savedVolume : state.volume;
+        v.muted  = savedMuted  != null ? savedMuted  : state.muted;
+        v.playbackRate = state.rate;
+      } catch (e) {}
       if (!state.paused && typeof v.play === 'function') {
         const p = v.play();
         if (p && typeof p.catch === 'function') p.catch(() => {});
@@ -263,6 +270,42 @@
       return false;
     }
     return true;
+  }
+
+  // ---------- áudio persistente ----------
+
+  function applySavedAudio(v) {
+    if (!v) return;
+    try {
+      if (savedVolume != null) v.volume = savedVolume;
+      if (savedMuted != null) v.muted = savedMuted;
+    } catch (e) { /* vídeo sem áudio/controle */ }
+  }
+
+  function updateMuteButton() {
+    const b = overlay && overlay.querySelector('#bvc-mute-btn');
+    if (!b) return;
+    const muted = current ? !!current.muted : !!savedMuted;
+    b.textContent = muted ? '\u{1F507}' : '\u{1F50A}';
+    b.title = muted ? 'Ativar som (preferência salva)' : 'Silenciar (fica mudo sempre)';
+  }
+
+  function saveAudioState(v) {
+    if (!v) return;
+    try {
+      savedMuted = !!v.muted;
+      savedVolume = v.volume;
+      chrome.storage.local.set({ bvcMuted: savedMuted, bvcVolume: savedVolume });
+    } catch (e) { /* storage indisponível */ }
+    updateMuteButton();
+  }
+
+  function watchAudio(v) {
+    if (audioListener && current) {
+      try { current.removeEventListener('volumechange', audioListener); } catch (e) {}
+    }
+    audioListener = () => saveAudioState(v);
+    try { v.addEventListener('volumechange', audioListener); } catch (e) {}
   }
 
   // ---------- overlay ----------
@@ -323,6 +366,15 @@
     const btnSettings = makeButton('\u2699', 'Resolução e enquadramento', () => togglePanel());
     btnSettings.style.right = '110px';
     btnSettings.id = 'bvc-settings-btn';
+    const btnMute = makeButton('\u{1F50A}', 'Silenciar (fica mudo sempre)', () => {
+      if (!current) return;
+      try {
+        current.muted = !current.muted;
+        saveAudioState(current);
+      } catch (e) {}
+    });
+    btnMute.style.right = '158px';
+    btnMute.id = 'bvc-mute-btn';
 
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
@@ -343,6 +395,7 @@
     setImp(panel, 'display', 'none');
     setImp(panel, 'text-align', 'left');
 
+    o.appendChild(btnMute);
     o.appendChild(btnSettings);
     o.appendChild(btnSwitch);
     o.appendChild(btnClose);
@@ -490,6 +543,9 @@
     v.setAttribute('controls', '');
 
     current = v;
+    applySavedAudio(v);
+    watchAudio(v);
+    updateMuteButton();
     applyFrame(frameSize);
     restartAttrObserver();
   }
@@ -551,6 +607,10 @@
 
     if (domObserver) { domObserver.disconnect(); domObserver = null; }
     if (attrObserver) { attrObserver.disconnect(); attrObserver = null; }
+    if (audioListener && current) {
+      try { current.removeEventListener('volumechange', audioListener); } catch (e) {}
+    }
+    audioListener = null;
 
     for (const v of Array.from(backups.keys())) restore(v);
 
@@ -632,13 +692,18 @@
     if (chrome.runtime && chrome.runtime.onMessage) chrome.runtime.onMessage.addListener(onMessage);
   } catch (e) { /* browser sem extensão */ }
 
-  // Preferência de enquadramento salva entre sessões.
+  // Preferências salvas entre sessões (enquadramento + áudio).
   try {
-    chrome.storage.local.get(['bvcFrame'], (r) => {
-      if (r && r.bvcFrame && FRAME_SIZES[r.bvcFrame]) {
+    chrome.storage.local.get(['bvcFrame', 'bvcMuted', 'bvcVolume'], (r) => {
+      if (!r) return;
+      if (r.bvcFrame && FRAME_SIZES[r.bvcFrame]) {
         frameSize = r.bvcFrame;
         if (overlay) applyFrame(frameSize);
       }
+      if (typeof r.bvcMuted === 'boolean') savedMuted = r.bvcMuted;
+      if (typeof r.bvcVolume === 'number') savedVolume = r.bvcVolume;
+      if (current) applySavedAudio(current);
+      updateMuteButton();
     });
   } catch (e) { /* storage indisponível */ }
 
