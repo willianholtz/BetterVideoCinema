@@ -4,7 +4,7 @@
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-4c8bf5?style=flat-square)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![Browsers](https://img.shields.io/badge/Browsers-Vivaldi%20%7C%20Chrome%20%7C%20Edge-32373c?style=flat-square)](https://vivaldi.com/)
-[![Version](https://img.shields.io/badge/version-1.1.1-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
+[![Version](https://img.shields.io/badge/version-1.2.0-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
 [![Privacy](https://img.shields.io/badge/Tracking-none-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema)
 
 ---
@@ -47,8 +47,11 @@ DRM-protected playback** — things a naive "clone the video" approach breaks.
 | 🎚️ **Quality control** | `⚙` opens a menu with the qualities the **site actually offers** (720p, 1080p, 4K…). Adaptive players switch levels **in place**; plain streams switch `src` while keeping the current time. |
 | 🖥️ **Frame size** | Pick **720p / 1080p / 4K / Fit** for the cinema screen itself. The choice is remembered between sessions. |
 | 🔇 **Sticky mute/volume** | Mute once and it stays muted — across videos, sites, and browser sessions. The `🔇/🔊` button and the player's own controls both update the saved preference. |
+| ⏩ **Speed & fit** | `0.5x–2x` playback speed and **Contorno / Preencher** (contain/cover) in the ⚙ panel — both remembered. |
+| 🖼️ **PiP + Fullscreen** | `⧉` sends the video to Picture-in-Picture; `⛶` enters real fullscreen (hides the browser chrome). |
+| ✨ **Auto-hide controls** | Buttons fade to 12% after ~2 s and reappear on mouse movement — pure immersion. |
 | 🧹 **Perfect restore** | Original parent, sibling position, `style` and `controls` attributes are backed up and put back. |
-| ⌨️ **Escape** | `Esc` or `✕` exits and unlocks scrolling. |
+| ⌨️ **Keyboard + Alt+C** | Seeking, volume, mute, next video, fullscreen and a global shortcut to toggle cinema mode. |
 | 🟢 **Clear state** | An **ON** badge on the toolbar button while cinema mode is active in that tab. |
 | 🛡️ **Private** | No analytics, no network calls, no data collection. Local browser code only. |
 
@@ -103,12 +106,29 @@ That's it — no build step, no dependencies, no server.
 |---|---|
 | `✕` | Leave cinema mode and restore the video. |
 | `⇄` | Switch to the next video on the page. |
-| `⚙` | Open the **Resolution & Framing** panel. |
+| `⚙` | Open the **Resolution / Framing / Speed / Fit** panel. |
 | `🔇` / `🔊` | Toggle mute. The choice is saved globally, so it applies to the next video too. |
+| `⛶` | Enter/exit real fullscreen (`F`). |
+| `⧉` | Enter/exit Picture-in-Picture. |
+
+The buttons fade out after ~2 seconds of inactivity. Just move the mouse over
+the video to bring them back.
+
+### ⌨️ Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `Alt` + `C` | Toggle cinema mode in the active tab (**global**, works without clicking). |
+| `←` / `→` | Seek back / forward 5 seconds. |
+| `↑` / `↓` | Volume up / down 10% (also saved). |
+| `M` | Toggle mute (also saved). |
+| `N` | Next video on the page. |
+| `F` | Toggle fullscreen. |
+| `Esc` | Leave cinema mode. |
 
 ### 🎚️ Resolution panel
 
-The `⚙` panel has two sections:
+The `⚙` panel has four sections:
 
 - **Quality of stream** — auto-detected from adaptive player levels (HLS.js and
   similar), `<source>` tags (`data-res`, `res`, `quality`, filename patterns), or
@@ -122,6 +142,11 @@ The `⚙` panel has two sections:
 - **Framing** — `Fit` (full tab, default), **720p**, **1080p**, **4K**. These set
   the size of the black cinema screen (capped at your actual viewport), so you
   can downsize the window even if your monitor is smaller than 4K.
+- **Speed** — `0.5x / 0.75x / 1x / 1.25x / 1.5x / 2x`, applied to the live video
+  without reloading and remembered for next time.
+- **Image fit** — **Contorno** (`contain`, default — full image with black bars)
+  or **Preencher** (`cover` — fills the screen, crops the edges). Handy for 4:3
+  clips on a 16:9 display.
 
 ### 🔇 Sticky audio
 
@@ -131,9 +156,6 @@ to `chrome.storage.local`. When a video enters cinema mode (including after
 `⇄`, a quality swap, or a browser restart), the saved values are applied to it.
 
 If you never touched the volume, the addon leaves the site's own audio alone.
-
-Both buttons fade to 45% opacity and brighten on hover, so they stay out of the
-way while you watch.
 
 ---
 
@@ -161,14 +183,24 @@ move the <video> into a fixed black overlay (z-index max)
 force controls · lock scroll · badge ON · watch for DOM tampering
      │
      ▼
-⚙ menu: probe player levels / <source> / URL → switch quality · set frame size
+apply saved audio · speed · fit · frame size
+     │
+     ▼
+⚙ menu: quality · framing · speed · image fit     ⛶ fullscreen     ⧉ PiP
+     │
+     ▼
+keyboard: ← → seek · ↑ ↓ volume · M mute · N next · F fullscreen · Esc exit
 ```
 
 The content script also installs a `MutationObserver` that re-adds `controls`
 if the site strips it, and another that exits cinema mode if the page removes
 the overlay. State is kept per tab, so switching tabs and coming back keeps the
-same mode. The framing preference is saved in `chrome.storage.local` and
-restored on the next activation.
+same mode. Audio, speed, image fit and frame size are saved in
+`chrome.storage.local` and restored on the next activation.
+
+The `Alt+C` command is declared in `manifest.json` and handled by the service
+worker through the same `toggleInTab()` used by the toolbar button, so the
+frame-selection logic is identical.
 
 ---
 
@@ -179,7 +211,8 @@ restored on the next activation.
 | `<all_urls>` host access | Needed to reach the video on **any** site — including pages with iframes. |
 | `scripting` | Injects `content.js` into a frame if it wasn't loaded automatically. |
 | `webNavigation` | Lists the tab's frames to find the one with the biggest video. |
-| `storage` | Remembers frame size (720p / 1080p / 4K / Fit) and your mute/volume preference. |
+| `storage` | Remembers frame size, mute/volume, speed and image fit. |
+| `commands` (Alt+C) | Global shortcut declared in the manifest; no extra runtime permission. |
 
 There are **no external requests**. The extension only injects local code and
 moves DOM nodes inside the current tab.
@@ -190,9 +223,9 @@ moves DOM nodes inside the current tab.
 
 ```
 BetterVideoCinema/
-├── manifest.json     # MV3 definition, version 1.0.0
-├── background.js     # toolbar action, frame probing, ON badge
-├── content.js        # video discovery, overlay, backup/restore, keyboard
+├── manifest.json     # MV3 definition, version 1.2.0, Alt+C command
+├── background.js     # toolbar action + Alt+C, frame probing, ON badge
+├── content.js        # video discovery, overlay, controls, shortcuts, restore
 ├── teste.html        # local test page (16:9 + 4:3 samples)
 ├── sample-16x9.mp4   # test fixture
 └── sample-4x3.mp4    # test fixture
@@ -203,10 +236,13 @@ BetterVideoCinema/
 Open `teste.html` directly in the browser, click the toolbar button, then try
 `Esc`, `⇄`, and click again. Both aspect ratios should fit without cropping.
 
-To check the new controls: click `⚙`, switch between **720p / 1080p / 4K / Fit**
-and confirm the black screen resizes without remounting the video. The test page
-has plain streams; on a page with multiple `<source>` tags or an adaptive player
-the **Quality** section fills up automatically.
+To check the controls: click `⚙`, switch between **720p / 1080p / 4K / Fit**,
+try **0.5x–2x** and **Contorno/Preencher**, then press `← → ↑ ↓ M N F`. Move the
+mouse to bring the faded buttons back. Mute and volume survive a page reload.
+The test page has plain streams; on a page with multiple `<source>` tags or an
+adaptive player the **Quality** section fills up automatically. Test `Alt+C` in
+the real browser — the headless test harness cannot verify browser-level
+shortcuts or native fullscreen/PiP.
 
 ---
 

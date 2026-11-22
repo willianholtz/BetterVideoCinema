@@ -34,7 +34,10 @@
   let frameSize = 'auto';
   let savedMuted = null;   // null = nunca configurado → não mexe no som do site
   let savedVolume = null;
+  let savedRate = null;
+  let savedFit = 'contain';
   let audioListener = null;
+  let controlsTimer = null;
   const backups = new Map();
 
   // ---------- utilitários ----------
@@ -253,7 +256,8 @@
       try {
         v.volume = savedVolume != null ? savedVolume : state.volume;
         v.muted  = savedMuted  != null ? savedMuted  : state.muted;
-        v.playbackRate = state.rate;
+        v.playbackRate = savedRate != null ? savedRate : state.rate;
+        setImp(v, 'object-fit', savedFit);
       } catch (e) {}
       if (!state.paused && typeof v.play === 'function') {
         const p = v.play();
@@ -330,15 +334,97 @@
     setImp(b, 'opacity', '0.45');
     setImp(b, 'z-index', '3');
     setImp(b, 'padding', '0');
-    setImp(b, 'transition', 'opacity 0.15s');
-    b.addEventListener('mouseenter', () => setImp(b, 'opacity', '1'));
-    b.addEventListener('mouseleave', () => setImp(b, 'opacity', '0.45'));
+    setImp(b, 'transition', 'opacity 0.2s');
+    b.dataset.bvcBtn = '1';
     b.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
       onClick();
     });
     return b;
+  }
+
+  // ---------- controles com auto-hide ----------
+
+  function eachControl(fn) {
+    if (overlay) overlay.querySelectorAll('[data-bvc-btn]').forEach(fn);
+  }
+
+  function showControls() {
+    eachControl((b) => setImp(b, 'opacity', '1'));
+    if (controlsTimer) clearTimeout(controlsTimer);
+    controlsTimer = setTimeout(hideControls, 2200);
+  }
+
+  function hideControls() {
+    eachControl((b) => setImp(b, 'opacity', '0.12'));
+    controlsTimer = null;
+  }
+
+  function scheduleHide(delay) {
+    if (controlsTimer) clearTimeout(controlsTimer);
+    controlsTimer = setTimeout(hideControls, delay || 700);
+  }
+
+  // ---------- fullscreen / PiP ----------
+
+  function syncFullscreenButton() {
+    const b = overlay && overlay.querySelector('#bvc-fs-btn');
+    if (!b) return;
+    const on = !!(document.fullscreenElement && document.fullscreenElement === overlay);
+    setImp(b, 'background', on ? 'rgba(76,139,245,0.45)' : 'rgba(0,0,0,0.55)');
+    b.title = on ? 'Sair da tela cheia (F)' : 'Tela cheia (F)';
+  }
+
+  function toggleFullscreen() {
+    if (!overlay) return;
+    try {
+      if (document.fullscreenElement === overlay) {
+        if (document.exitFullscreen) document.exitFullscreen();
+      } else if (overlay.requestFullscreen) {
+        const p = overlay.requestFullscreen();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      }
+    } catch (e) { /* navegador sem suporte */ }
+  }
+
+  function togglePip() {
+    if (!current) return;
+    try {
+      if (document.pictureInPictureElement) {
+        const p = document.exitPictureInPicture();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      } else if (current.requestPictureInPicture) {
+        const p = current.requestPictureInPicture();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      }
+    } catch (e) { /* PiP indisponível aqui */ }
+  }
+
+  // ---------- velocidade / ajuste de imagem ----------
+
+  function applyPlaybackRate(v) {
+    if (!v || savedRate == null) return;
+    try { v.playbackRate = savedRate; } catch (e) {}
+  }
+
+  function setPlaybackRate(rate) {
+    savedRate = rate;
+    if (current) applyPlaybackRate(current);
+    try { chrome.storage.local.set({ bvcRate: rate }); } catch (e) {}
+    refreshQualityMenu();
+  }
+
+  function applyFit(v) {
+    if (!v) return;
+    setImp(v, 'object-fit', savedFit);
+  }
+
+  function setFit(fit) {
+    savedFit = fit;
+    if (current) applyFit(current);
+    try { chrome.storage.local.set({ bvcFit: fit }); } catch (e) {}
+    refreshQualityMenu();
   }
 
   function createOverlay() {
@@ -375,6 +461,12 @@
     });
     btnMute.style.right = '158px';
     btnMute.id = 'bvc-mute-btn';
+    const btnFs = makeButton('\u26F6', 'Tela cheia (F)', () => toggleFullscreen());
+    btnFs.style.right = '206px';
+    btnFs.id = 'bvc-fs-btn';
+    const btnPip = makeButton('\u29C9', 'Picture-in-Picture', () => togglePip());
+    btnPip.style.right = '254px';
+    btnPip.id = 'bvc-pip-btn';
 
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
@@ -395,11 +487,17 @@
     setImp(panel, 'display', 'none');
     setImp(panel, 'text-align', 'left');
 
+    o.appendChild(btnPip);
+    o.appendChild(btnFs);
     o.appendChild(btnMute);
     o.appendChild(btnSettings);
     o.appendChild(btnSwitch);
     o.appendChild(btnClose);
     o.appendChild(panel);
+
+    o.addEventListener('mousemove', showControls);
+    o.addEventListener('mouseenter', showControls);
+    o.addEventListener('mouseleave', () => scheduleHide(600));
     return o;
   }
 
@@ -510,6 +608,17 @@
       panel.appendChild(panelOption(FRAME_SIZES[key].label, key === frameSize, () => applyFrame(key)));
     });
 
+    panel.appendChild(sectionTitle('Velocidade'));
+    const activeRate = current ? (current.playbackRate || 1) : (savedRate || 1);
+    [0.5, 0.75, 1, 1.25, 1.5, 2].forEach((rate) => {
+      panel.appendChild(panelOption(rate + 'x', Math.abs(activeRate - rate) < 0.01, () => setPlaybackRate(rate)));
+    });
+
+    panel.appendChild(sectionTitle('Ajuste da imagem'));
+    [['contain', 'Contorno'], ['cover', 'Preencher']].forEach(([fit, label]) => {
+      panel.appendChild(panelOption(label, savedFit === fit, () => setFit(fit)));
+    });
+
     if (current) {
       const info = document.createElement('div');
       setImp(info, 'margin-top', '8px');
@@ -546,7 +655,11 @@
     applySavedAudio(v);
     watchAudio(v);
     updateMuteButton();
+    applyPlaybackRate(v);
+    applyFit(v);
     applyFrame(frameSize);
+    syncFullscreenButton();
+    showControls();
     restartAttrObserver();
   }
 
@@ -611,6 +724,10 @@
       try { current.removeEventListener('volumechange', audioListener); } catch (e) {}
     }
     audioListener = null;
+    if (controlsTimer) { clearTimeout(controlsTimer); controlsTimer = null; }
+    try {
+      if (document.fullscreenElement === overlay && document.exitFullscreen) document.exitFullscreen();
+    } catch (e) {}
 
     for (const v of Array.from(backups.keys())) restore(v);
 
@@ -642,13 +759,55 @@
 
   // ---------- teclado ----------
 
-  window.addEventListener(
-    'keydown',
-    (e) => {
-      if (active && e.key === 'Escape') deactivate();
-    },
-    true
-  );
+  window.addEventListener('keydown', (e) => {
+    if (!active || !current) return;
+    const tag = ((e.target && e.target.tagName) || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const v = current;
+
+    switch (e.key) {
+      case 'Escape':
+        if (document.fullscreenElement || document.pictureInPictureElement) return;
+        deactivate();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        try { v.currentTime = Math.max(0, v.currentTime - 5); } catch (err) {}
+        showControls();
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        try { v.currentTime = Math.min(v.duration || Infinity, v.currentTime + 5); } catch (err) {}
+        showControls();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        try { v.volume = Math.min(1, v.volume + 0.1); saveAudioState(v); } catch (err) {}
+        showControls();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        try { v.volume = Math.max(0, v.volume - 0.1); saveAudioState(v); } catch (err) {}
+        showControls();
+        break;
+      case 'm': case 'M':
+        e.preventDefault();
+        try { v.muted = !v.muted; saveAudioState(v); } catch (err) {}
+        showControls();
+        break;
+      case 'n': case 'N':
+        e.preventDefault();
+        switchVideo();
+        showControls();
+        break;
+      case 'f': case 'F':
+        e.preventDefault();
+        toggleFullscreen();
+        break;
+      default:
+        return;
+    }
+  }, true);
 
   // ---------- mensagens do background ----------
 
@@ -692,20 +851,35 @@
     if (chrome.runtime && chrome.runtime.onMessage) chrome.runtime.onMessage.addListener(onMessage);
   } catch (e) { /* browser sem extensão */ }
 
-  // Preferências salvas entre sessões (enquadramento + áudio).
+  // Preferências salvas entre sessões (enquadramento, áudio, velocidade, ajuste).
   try {
-    chrome.storage.local.get(['bvcFrame', 'bvcMuted', 'bvcVolume'], (r) => {
-      if (!r) return;
-      if (r.bvcFrame && FRAME_SIZES[r.bvcFrame]) {
-        frameSize = r.bvcFrame;
-        if (overlay) applyFrame(frameSize);
+    chrome.storage.local.get(
+      ['bvcFrame', 'bvcMuted', 'bvcVolume', 'bvcRate', 'bvcFit'],
+      (r) => {
+        if (!r) return;
+        if (r.bvcFrame && FRAME_SIZES[r.bvcFrame]) {
+          frameSize = r.bvcFrame;
+          if (overlay) applyFrame(frameSize);
+        }
+        if (typeof r.bvcMuted === 'boolean') savedMuted = r.bvcMuted;
+        if (typeof r.bvcVolume === 'number') savedVolume = r.bvcVolume;
+        if (typeof r.bvcRate === 'number') savedRate = r.bvcRate;
+        if (r.bvcFit === 'contain' || r.bvcFit === 'cover') savedFit = r.bvcFit;
+        if (current) {
+          applySavedAudio(current);
+          applyPlaybackRate(current);
+          applyFit(current);
+        }
+        updateMuteButton();
       }
-      if (typeof r.bvcMuted === 'boolean') savedMuted = r.bvcMuted;
-      if (typeof r.bvcVolume === 'number') savedVolume = r.bvcVolume;
-      if (current) applySavedAudio(current);
-      updateMuteButton();
-    });
+    );
   } catch (e) { /* storage indisponível */ }
+
+  try {
+    document.addEventListener('fullscreenchange', syncFullscreenButton);
+    document.addEventListener('enterpictureinpicture', showControls);
+    document.addEventListener('leavepictureinpicture', showControls);
+  } catch (e) { /* eventos não suportados */ }
 
   window.__modoCinema = {
     ping() {},
