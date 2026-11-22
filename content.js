@@ -320,8 +320,7 @@
     b.textContent = glyph;
     b.title = title;
     b.setAttribute('aria-label', title);
-    setImp(b, 'position', 'absolute');
-    setImp(b, 'top', '14px');
+    setImp(b, 'position', 'relative');
     setImp(b, 'width', '38px');
     setImp(b, 'height', '38px');
     setImp(b, 'border-radius', '50%');
@@ -351,19 +350,25 @@
   }
 
   function showControls() {
-    eachControl((b) => setImp(b, 'opacity', '1'));
+    eachControl((b) => {
+      setImp(b, 'transition', 'opacity 0.15s ease'); // aparece rápido
+      setImp(b, 'opacity', '1');
+    });
     if (controlsTimer) clearTimeout(controlsTimer);
-    controlsTimer = setTimeout(hideControls, 2200);
+    controlsTimer = setTimeout(hideControls, 3000);
   }
 
   function hideControls() {
-    eachControl((b) => setImp(b, 'opacity', '0.12'));
+    eachControl((b) => {
+      setImp(b, 'transition', 'opacity 0.8s ease'); // some devagar
+      setImp(b, 'opacity', '0.12');
+    });
     controlsTimer = null;
   }
 
   function scheduleHide(delay) {
     if (controlsTimer) clearTimeout(controlsTimer);
-    controlsTimer = setTimeout(hideControls, delay || 700);
+    controlsTimer = setTimeout(hideControls, delay || 1200);
   }
 
   // ---------- fullscreen / PiP ----------
@@ -445,12 +450,21 @@
     setImp(o, 'border', 'none');
     setImp(o, 'pointer-events', 'auto');
 
+    // Barra de controles abaixo do player (centralizada no rodapé do overlay).
+    const bar = document.createElement('div');
+    bar.id = 'bvc-toolbar';
+    setImp(bar, 'position', 'absolute');
+    setImp(bar, 'bottom', '14px');
+    setImp(bar, 'left', '50%');
+    setImp(bar, 'transform', 'translateX(-50%)');
+    setImp(bar, 'display', 'flex');
+    setImp(bar, 'gap', '8px');
+    setImp(bar, 'align-items', 'center');
+    setImp(bar, 'z-index', '4');
+
     const btnClose = makeButton('\u2715', 'Sair do modo cinema (Esc)', () => deactivate());
-    btnClose.style.right = '14px';
     const btnSwitch = makeButton('\u21C4', 'Trocar de vídeo', () => switchVideo());
-    btnSwitch.style.right = '62px';
     const btnSettings = makeButton('\u2699', 'Resolução e enquadramento', () => togglePanel());
-    btnSettings.style.right = '110px';
     btnSettings.id = 'bvc-settings-btn';
     const btnMute = makeButton('\u{1F50A}', 'Silenciar (fica mudo sempre)', () => {
       if (!current) return;
@@ -459,21 +473,19 @@
         saveAudioState(current);
       } catch (e) {}
     });
-    btnMute.style.right = '158px';
     btnMute.id = 'bvc-mute-btn';
     const btnFs = makeButton('\u26F6', 'Tela cheia (F)', () => toggleFullscreen());
-    btnFs.style.right = '206px';
     btnFs.id = 'bvc-fs-btn';
     const btnPip = makeButton('\u29C9', 'Picture-in-Picture', () => togglePip());
-    btnPip.style.right = '254px';
     btnPip.id = 'bvc-pip-btn';
 
     const panel = document.createElement('div');
     panel.id = PANEL_ID;
     setImp(panel, 'position', 'absolute');
-    setImp(panel, 'top', '60px');
-    setImp(panel, 'right', '14px');
-    setImp(panel, 'width', '190px');
+    setImp(panel, 'bottom', '62px');
+    setImp(panel, 'left', '50%');
+    setImp(panel, 'transform', 'translateX(-50%)');
+    setImp(panel, 'width', '230px');
     setImp(panel, 'max-height', '70vh');
     setImp(panel, 'overflow-y', 'auto');
     setImp(panel, 'padding', '10px');
@@ -487,12 +499,14 @@
     setImp(panel, 'display', 'none');
     setImp(panel, 'text-align', 'left');
 
-    o.appendChild(btnPip);
-    o.appendChild(btnFs);
-    o.appendChild(btnMute);
-    o.appendChild(btnSettings);
-    o.appendChild(btnSwitch);
-    o.appendChild(btnClose);
+    bar.appendChild(btnPip);
+    bar.appendChild(btnFs);
+    bar.appendChild(btnMute);
+    bar.appendChild(btnSettings);
+    bar.appendChild(btnSwitch);
+    bar.appendChild(btnClose);
+
+    o.appendChild(bar);
     o.appendChild(panel);
 
     o.addEventListener('mousemove', showControls);

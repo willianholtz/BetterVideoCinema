@@ -4,7 +4,7 @@
 
 [![Manifest V3](https://img.shields.io/badge/Manifest-V3-4c8bf5?style=flat-square)](https://developer.chrome.com/docs/extensions/develop/migrate/what-is-mv3)
 [![Browsers](https://img.shields.io/badge/Browsers-Vivaldi%20%7C%20Chrome%20%7C%20Edge-32373c?style=flat-square)](https://vivaldi.com/)
-[![Version](https://img.shields.io/badge/version-1.2.0-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
+[![Version](https://img.shields.io/badge/version-1.3.0-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema/releases)
 [![Privacy](https://img.shields.io/badge/Tracking-none-2ea44f?style=flat-square)](https://github.com/willianholtz/BetterVideoCinema)
 
 ---
@@ -51,7 +51,9 @@ DRM-protected playback** — things a naive "clone the video" approach breaks.
 | 🖼️ **PiP + Fullscreen** | `⧉` sends the video to Picture-in-Picture; `⛶` enters real fullscreen (hides the browser chrome). |
 | ✨ **Auto-hide controls** | Buttons fade to 12% after ~2 s and reappear on mouse movement — pure immersion. |
 | 🧹 **Perfect restore** | Original parent, sibling position, `style` and `controls` attributes are backed up and put back. |
-| ⌨️ **Keyboard + Alt+C** | Seeking, volume, mute, next video, fullscreen and a global shortcut to toggle cinema mode. |
+| 🎛️ **Bottom toolbar** | Buttons sit in a slim bar **below the player**, never over the picture. |
+| ✨ **Auto-hide controls** | Buttons reappear fast (0.15 s) on mouse move and fade out slowly (0.8 s) after ~3 s. |
+| ⌨️ **Keyboard + Ctrl+Shift+Y** | Seeking, volume, mute, next video, fullscreen and a global shortcut to toggle cinema mode. |
 | 🟢 **Clear state** | An **ON** badge on the toolbar button while cinema mode is active in that tab. |
 | 🛡️ **Private** | No analytics, no network calls, no data collection. Local browser code only. |
 
@@ -102,6 +104,9 @@ That's it — no build step, no dependencies, no server.
 
 ### On-screen controls
 
+All buttons live in a slim bar **below the video** (`#bvc-toolbar`), so the
+picture is never covered.
+
 | Button | Action |
 |---|---|
 | `✕` | Leave cinema mode and restore the video. |
@@ -111,14 +116,14 @@ That's it — no build step, no dependencies, no server.
 | `⛶` | Enter/exit real fullscreen (`F`). |
 | `⧉` | Enter/exit Picture-in-Picture. |
 
-The buttons fade out after ~2 seconds of inactivity. Just move the mouse over
-the video to bring them back.
+The controls appear fast (0.15 s) when you move the mouse and fade out slowly
+(0.8 s) after ~3 s of inactivity — just move the mouse to bring them back.
 
 ### ⌨️ Keyboard shortcuts
 
 | Key | Action |
 |---|---|
-| `Alt` + `C` | Toggle cinema mode in the active tab (**global**, works without clicking). |
+| `Ctrl` + `Shift` + `Y` | Toggle cinema mode in the active tab (**global**, works without clicking). |
 | `←` / `→` | Seek back / forward 5 seconds. |
 | `↑` / `↓` | Volume up / down 10% (also saved). |
 | `M` | Toggle mute (also saved). |
@@ -198,7 +203,7 @@ the overlay. State is kept per tab, so switching tabs and coming back keeps the
 same mode. Audio, speed, image fit and frame size are saved in
 `chrome.storage.local` and restored on the next activation.
 
-The `Alt+C` command is declared in `manifest.json` and handled by the service
+The `Ctrl+Shift+Y` command is declared in `manifest.json` and handled by the service
 worker through the same `toggleInTab()` used by the toolbar button, so the
 frame-selection logic is identical.
 
@@ -212,7 +217,7 @@ frame-selection logic is identical.
 | `scripting` | Injects `content.js` into a frame if it wasn't loaded automatically. |
 | `webNavigation` | Lists the tab's frames to find the one with the biggest video. |
 | `storage` | Remembers frame size, mute/volume, speed and image fit. |
-| `commands` (Alt+C) | Global shortcut declared in the manifest; no extra runtime permission. |
+| `commands` (Ctrl+Shift+Y) | Global shortcut declared in the manifest; no extra runtime permission. |
 
 There are **no external requests**. The extension only injects local code and
 moves DOM nodes inside the current tab.
@@ -223,8 +228,8 @@ moves DOM nodes inside the current tab.
 
 ```
 BetterVideoCinema/
-├── manifest.json     # MV3 definition, version 1.2.0, Alt+C command
-├── background.js     # toolbar action + Alt+C, frame probing, ON badge
+├── manifest.json     # MV3 definition, version 1.3.0, Ctrl+Shift+Y command
+├── background.js     # toolbar action + shortcut, frame probing, ON badge
 ├── content.js        # video discovery, overlay, controls, shortcuts, restore
 ├── teste.html        # local test page (16:9 + 4:3 samples)
 ├── sample-16x9.mp4   # test fixture
@@ -240,7 +245,7 @@ To check the controls: click `⚙`, switch between **720p / 1080p / 4K / Fit**,
 try **0.5x–2x** and **Contorno/Preencher**, then press `← → ↑ ↓ M N F`. Move the
 mouse to bring the faded buttons back. Mute and volume survive a page reload.
 The test page has plain streams; on a page with multiple `<source>` tags or an
-adaptive player the **Quality** section fills up automatically. Test `Alt+C` in
+adaptive player the **Quality** section fills up automatically. Test `Ctrl+Shift+Y` in
 the real browser — the headless test harness cannot verify browser-level
 shortcuts or native fullscreen/PiP.
 

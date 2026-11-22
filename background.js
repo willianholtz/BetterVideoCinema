@@ -70,7 +70,7 @@ function setBadge(tabId, text, color) {
 
 chrome.action.onClicked.addListener(toggleInTab);
 
-// Atalho global (Alt+C) — usa a mesma lógica do botão da toolbar.
+// Atalho global (Ctrl+Shift+Y) — usa a mesma lógica do botão da toolbar.
 if (chrome.commands && chrome.commands.onCommand) {
   chrome.commands.onCommand.addListener(async (cmd) => {
     if (cmd !== 'toggle-cinema') return;

@@ -1,16 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Better Video Cinema",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Cinematic mode for any webpage video: dark backdrop, quality/frame/speed controls, PiP, fullscreen and persistent mute. Works on KVS Player and iframe-embedded players.",
   "permissions": ["scripting", "webNavigation", "storage"],
   "host_permissions": ["<all_urls>"],
   "action": {
-    "default_title": "Toggle cinema mode (Alt+C)"
+    "default_title": "Toggle cinema mode (Ctrl+Shift+Y)"
   },
   "commands": {
     "toggle-cinema": {
-      "suggested_key": { "default": "Alt+C", "mac": "Alt+C" },
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Ctrl+Shift+Y" },
       "description": "Toggle cinema mode in the active tab"
     }
   },
