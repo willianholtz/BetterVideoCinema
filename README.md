@@ -49,10 +49,9 @@ DRM-protected playback** — things a naive "clone the video" approach breaks.
 | 🔇 **Sticky mute/volume** | Mute once and it stays muted — across videos, sites, and browser sessions. The `🔇/🔊` button and the player's own controls both update the saved preference. |
 | ⏩ **Speed & fit** | `0.5x–2x` playback speed and **Contorno / Preencher** (contain/cover) in the ⚙ panel — both remembered. |
 | 🖼️ **PiP + Fullscreen** | `⧉` sends the video to Picture-in-Picture; `⛶` enters real fullscreen (hides the browser chrome). |
-| ✨ **Auto-hide controls** | Buttons fade to 12% after ~2 s and reappear on mouse movement — pure immersion. |
+| ✨ **Auto-hide controls** | Buttons fade to 12% after ~3 s (0.8 s fade) and snap back in 0.15 s on mouse move — pure immersion. |
 | 🧹 **Perfect restore** | Original parent, sibling position, `style` and `controls` attributes are backed up and put back. |
 | 🎛️ **Bottom toolbar** | Buttons sit in a slim bar **below the player**, never over the picture. |
-| ✨ **Auto-hide controls** | Buttons reappear fast (0.15 s) on mouse move and fade out slowly (0.8 s) after ~3 s. |
 | ⌨️ **Keyboard + Ctrl+Shift+Y** | Seeking, volume, mute, next video, fullscreen and a global shortcut to toggle cinema mode. |
 | 🟢 **Clear state** | An **ON** badge on the toolbar button while cinema mode is active in that tab. |
 | 🛡️ **Private** | No analytics, no network calls, no data collection. Local browser code only. |
@@ -92,6 +91,24 @@ Chromium browser with Manifest V3 support.
    right-click the toolbar → **Customize toolbar** → pin **Better Video Cinema**.
 
 That's it — no build step, no dependencies, no server.
+
+### 🎨 Toolbar icon
+
+The extension now has its own icon: a **gold cinema screen with a play triangle,
+framed by letterbox bars on a dark rounded square**. The editable source is
+`icons/icon.svg`; the toolbar/store PNGs (`icon16.png`, `icon48.png`,
+`icon128.png`) are generated from it and registered in `manifest.json` under
+both `action.default_icon` and the top-level `icons` key.
+
+To change the artwork, edit the SVG and re-render the three sizes:
+
+```bash
+cd ~/Documentos/GitHub/BetterVideoCinema/icons
+for S in 16 48 128; do rsvg-convert -w $S -h $S icon.svg -o icon$S.png; done
+```
+
+Then use **Reload** on the unpacked extension in `vivaldi://extensions` —
+Chromium does not pick up icon changes from disk automatically.
 
 ---
 
@@ -231,6 +248,7 @@ BetterVideoCinema/
 ├── manifest.json     # MV3 definition, version 1.3.0, Ctrl+Shift+Y command
 ├── background.js     # toolbar action + shortcut, frame probing, ON badge
 ├── content.js        # video discovery, overlay, controls, shortcuts, restore
+├── icons/            # icon.svg source + icon16/48/128.png (toolbar icon)
 ├── teste.html        # local test page (16:9 + 4:3 samples)
 ├── sample-16x9.mp4   # test fixture
 └── sample-4x3.mp4    # test fixture
